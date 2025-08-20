@@ -1,0 +1,158 @@
+---
+- name: Kea and Stork with Postgres
+  hosts:
+  become: true
+  vars_files:
+    - vars/kea.yml
+
+  tasks:
+    - name: Base packages install
+      ansible.builtin.apt:
+        name:
+          - curl
+          - ca-certificates
+          - python3-psycopg2
+          - acl
+
+    - name: Make sure system time is set to UTC
+      community.general.timezone:
+        name: UTC
+
+    - name: Ensure /usr/share/postgresql-common/pgdg exists
+      ansible.builtin.file:
+        path: /usr/share/postgresql-common/pgdg
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Download PostgreSQL GPG key
+      ansible.builtin.get_url:
+        url: 'https://www.postgresql.org/media/keys/ACCC4CF8.asc'
+        dest: '/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc'
+        mode: '0644'
+
+    - name: Add PostgreSQL APT repository
+      ansible.builtin.apt_repository:
+        repo:
+          'deb
+          [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc]
+          https://apt.postgresql.org/pub/repos/apt {{
+          ansible_distribution_release }}-pgdg main'
+        filename: 'pgdg'
+        state: present
+
+    - name: Update APT cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install PostgreSQL {{ pg_version }}
+      ansible.builtin.apt:
+        name: postgresql-{{ pg_version }}
+        state: present
+
+    # Auth setup for Kea in Postgres
+    - name: Setup local auth for kea in PG
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/pg_hba.conf
+        line: 'local kea kea  password'
+        state: present
+        backup: yes
+
+    - name: Setup host auth v4 for kea in PG
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/pg_hba.conf
+        line: 'host kea kea 127.0.0.1/32 password'
+        state: present
+        backup: yes
+
+    - name: Setup host auth v6 for kea in PG
+      ansible.builtin.lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/pg_hba.conf
+        line: 'host kea kea ::1/128 password'
+        state: present
+        backup: yes
+
+    - name: Restart postgres
+      ansible.builtin.systemd:
+        name: postgresql
+        state: restarted
+
+    - name: Add Kea repository
+      ansible.builtin.shell:
+        curl -1sLf 'https://dl.cloudsmith.io/public/isc/kea-2-6/setup.deb.sh' |
+        sudo -E bash
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install kea
+      ansible.builtin.apt:
+        name: isc-kea
+        state: present
+
+    - name: Create kea DB user
+      become_user: postgres
+      community.postgresql.postgresql_user:
+        name: '{{ kea_db_user }}'
+        password: '{{ kea_db_user_password }}'
+        encrypted: yes
+        state: present
+        login_user: postgres
+
+    - name: Create kea DB
+      become_user: postgres
+      community.postgresql.postgresql_db:
+        name: '{{ kea_db_name }}'
+        owner: '{{ kea_db_user }}'
+        state: present
+        login_user: postgres
+
+    - name: Initialize the kea DB
+      ansible.builtin.shell:
+        kea-admin db-init pgsql -u {{ kea_db_user }} -p {{ kea_db_user_password
+        }} -n {{ kea_db_name }}
+
+    - name: Add stork repository
+      ansible.builtin.shell:
+        curl -1sLf 'https://dl.cloudsmith.io/public/isc/stork/setup.deb.sh' |
+        sudo -E bash
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install stork server
+      ansible.builtin.apt:
+        name: isc-stork-server
+        state: present
+
+    - name: Initialize the stork DB
+      ansible.builtin.shell:
+        sudo -u postgres stork-tool db-create --db-name stork --db-user
+        stork-server
+
+    - name: Configure server.env for stork
+      ansible.builtin.lineinfile:
+        path: /etc/stork/server.env
+        regexp: '^# STORK_DATABASE_USER_NAME'
+        line: 'STORK_DATABASE_USER_NAME=stork-server'
+        backrefs: yes
+
+    - name: Restart and enable stork server
+      ansible.builtin.systemd:
+        name: isc-stork-server
+        enabled: true
+        state: restarted
+
+    - name: Install stork agent
+      ansible.builtin.apt:
+        name: isc-stork-agent
+        state: present
+
+    - name: Change port for stork agent to avoid conflict with stork server
+      ansible.builtin.lineinfile:
+        path: /etc/stork/agent.env
+        regexp: '^# STORK_AGENT_PORT'
+        line: 'STORK_AGENT_PORT=8081'

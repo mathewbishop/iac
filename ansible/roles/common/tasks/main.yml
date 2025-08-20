@@ -1,0 +1,33 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for roles/common
+  - name: Setup .bashrc for {{ limited_user }}
+    lineinfile:
+      path: /home/{{ limited_user }}/.bashrc
+      state: present
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+    with_items:
+      - { regexp: '^# *alias ll', line: "alias ll='ls -l'"}
+      - { regexp: '^# *alias la', line: "alias la='ls -A'"}
+      - { regexp: '^# *alias l', line: "alias l='ls -CF'"}
+
+  - name: Setup .bashrc for root
+    lineinfile:
+      path: /root/.bashrc
+      state: present
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+    with_items:
+      - { regexp: '^# *export LS_OPTIONS=''--color=auto''', line: "export LS_OPTIONS='--color=auto'"}
+      - { regexp: '^# *eval "\$\(dircolors\)"', line: 'eval "$(dircolors)"'}
+      - { regexp: '^# *alias ls=''ls \$LS_OPTIONS''', line: "alias ls='ls $LS_OPTIONS'"}
+      - { regexp: '^# *alias ll=''ls \$LS_OPTIONS -l''', line: "alias ll='ls $LS_OPTIONS -l'"}
+      - { regexp: '^# *alias l=''ls \$LS_OPTIONS -lA''', line: "alias l='ls $LS_OPTIONS -lA'"}
+
+  - name: Set red shell prompt for root
+    lineinfile:
+      path: /root/.bashrc
+      insertafter: '^alias l=.*'
+      regexp: '^PS1='
+      line: PS1='${debian_chroot:+($debian_chroot)}\[\033[01;31m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '

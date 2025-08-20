@@ -1,0 +1,230 @@
+---
+- name: Zabbix with Postgres and TimescaleDB
+  hosts:
+  become: true
+  roles:
+    - name: common
+      vars:
+        limited_user:
+  vars_files:
+    - vars/zabbix.yml
+
+  tasks:
+    ###################################
+    # Postgres
+    ###################################
+    - name: Install psycopg2, gnupg2
+      apt:
+        name:
+          - python3-psycopg2
+          - gnupg2
+        state: present
+
+    - name: Ensure /usr/share/postgresql-common/pgdg exists
+      file:
+        path: /usr/share/postgresql-common/pgdg
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Download PostgreSQL GPG key
+      get_url:
+        url: 'https://www.postgresql.org/media/keys/ACCC4CF8.asc'
+        dest: '/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc'
+        mode: '0644'
+
+    - name: Add PostgreSQL APT repository
+      apt_repository:
+        repo:
+          'deb
+          [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc]
+          https://apt.postgresql.org/pub/repos/apt {{
+          ansible_distribution_release }}-pgdg main'
+        filename: 'pgdg'
+        state: present
+
+    - name: Update APT cache
+      apt:
+        update_cache: true
+
+    - name: Install PostgreSQL 16
+      apt:
+        name: postgresql-{{ pg_version }}
+        state: present
+
+    - name: Allow trust auth to DB to ease the rest of the install
+      lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/pg_hba.conf
+        regexp: '^local\s+all\s+postgres\s+peer'
+        line: 'local all all trust'
+        backrefs: yes
+
+    # Configure postgres to accept remote connections
+    - name: Update postgresql.conf to listen on all addresses
+      lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/postgresql.conf # Adjust version/path as needed
+        regexp: '^#?listen_addresses'
+        line: "listen_addresses = '*'"
+        state: present
+        backup: yes
+
+    - name: Allow remote connections in pg_hba.conf
+      lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/pg_hba.conf # Adjust version/path as needed
+        line: 'host all all 0.0.0.0/0 md5'
+        state: present
+        backup: yes
+
+    - name: Restart PostgreSQL
+      service:
+        name: postgresql
+        state: restarted
+
+    ###################################
+    # Zabbix
+    ###################################
+    - name: Download Zabbix repository package
+      get_url:
+        url: https://repo.zabbix.com/zabbix/7.2/release/debian/pool/main/z/zabbix-release/zabbix-release_latest_7.2+debian12_all.deb
+        dest: /tmp/zabbix-release.deb
+
+    - name: Install Zabbix repository
+      apt:
+        deb: /tmp/zabbix-release.deb
+        state: present
+
+    # NOTE: Separete taks for updating the APT cache. If you just add update_cache: yes to the previous task, it runs immediately and does not always give time for the cache to be fully updated before the next task runs, which can cause some of the packages in the next task to fail to install, reporting "package not found"
+    - name: Update APT cache
+      apt:
+        update_cache: yes
+
+    - name: Install Zabbix packages
+      apt:
+        name:
+          - zabbix-server-pgsql
+          - zabbix-frontend-php
+          - php8.2-pgsql
+          - zabbix-nginx-conf
+          - zabbix-sql-scripts
+          - zabbix-agent
+        state: present
+
+    - name: Create Zabbix database user
+      postgresql_user:
+        name: zabbix
+        password: '{{ zabbix_dbuser_password }}'
+        state: present
+
+    - name: Create Zabbix database
+      postgresql_db:
+        name: zabbix
+        owner: zabbix
+        state: present
+
+    - name: Import Zabbix schema
+      shell:
+        zcat /usr/share/zabbix/sql-scripts/postgresql/server.sql.gz | psql -U
+        zabbix
+      args:
+        creates: /var/lib/postgresql/.zabbix_schema_imported
+
+    - name: Configure zabbix user DB password in Zabbix server
+      lineinfile:
+        path: /etc/zabbix/zabbix_server.conf
+        regexp: '^DBPassword='
+        line: 'DBPassword={{ zabbix_dbuser_password }}'
+
+    # Setup nginx to serve the zabbix frontend
+    - name: Un-comment 'listen 8080;' in Nginx config for Zabbix
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/nginx.conf
+        regexp: '^#\s*listen\s*8080;'
+        line: 'listen 8080;'
+
+    - name: Un-comment 'server_name example.com;' in Nginx config for Zabbix
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/nginx.conf
+        regexp: '^#\s*server_name\s*example.com;'
+        line: 'server_name example.com;'
+
+    - name: Start and enable Zabbix server
+      systemd:
+        name: '{{ item }}'
+        state: restarted
+        enabled: true
+      loop:
+        - zabbix-server
+        - zabbix-agent
+        - nginx
+        - php8.2-fpm
+
+    ###################################
+    # TimescaleDB
+    ###################################
+    - name: Download TimescaleDB GPG key
+      get_url:
+        url: 'https://packagecloud.io/timescale/timescaledb/gpgkey'
+        dest: '/usr/share/keyrings/timescaledb-keyring.asc'
+        mode: '0644'
+
+    - name: Add TimescaleDB APT repository
+      ansible.builtin.apt_repository:
+        repo:
+          'deb [signed-by=/usr/share/keyrings/timescaledb-keyring.asc]
+          https://packagecloud.io/timescale/timescaledb/debian/ {{
+          ansible_distribution_release }} main'
+        filename: 'timescaledb'
+        state: present
+
+    - name: Update APT cache
+      apt:
+        update_cache: true
+
+    # NOTE: The method shown in the official TimescaleDB documentation for installing a specific version of Timescale is incorrect for Debian. The package names for specific Timescale versions on Debian must include the "~debian12" at the end as shown in this task
+    - name: Install TimescaleDB
+      apt:
+        name:
+          - timescaledb-2-postgresql-{{ pg_version }}=2.17.2~debian12
+          # If not installing the latest version of Timescale, you _must_ also specifically install the same version of timescaledb-loader, or else apt will install the latest timescaledb-loader and this will cause a problem
+          - timescaledb-2-loader-postgresql-{{ pg_version }}=2.17.2~debian12
+          - timescaledb-tools
+        state: present
+
+    - name: Run TimescaleDB Tune
+      command: timescaledb-tune --yes
+      register: tune_result
+      changed_when: "'Saving changes' in tune_result.stdout"
+
+    - name: Restart PostgreSQL
+      systemd:
+        name: postgresql
+        state: restarted
+
+    - name: Create TimescaleDB extension in Zabbix database # Note that the postgres DB user is used to actually create the extension on the zabbix database
+      postgresql_query:
+        db: zabbix
+        login_user: postgres
+        query: 'CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;'
+
+    - name: Run Zabbix TimescaleDB schema script
+      shell:
+        cmd: cat /usr/share/zabbix/sql-scripts/postgresql/timescaledb/schema.sql
+          | psql -U zabbix # The zabbix user will own the Timescale tables so that it can use them, so we run the timescale SQL scripts under zabbix DB user
+
+    - name: Set local postgres auth back to peer
+      lineinfile:
+        path: /etc/postgresql/{{ pg_version }}/main/pg_hba.conf
+        regexp: '^local\s+all\s+all\s+trust'
+        line: 'local all postgres peer'
+        backrefs: yes
+
+    - name: Restart PostgreSQL
+      systemd:
+        name: postgresql
+        state: restarted
+
+    - name: Restart Zabbix server for Timescale changes to take effect
+      systemd:
+        name: zabbix-server
+        state: restarted

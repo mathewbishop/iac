@@ -1,0 +1,12 @@
+# OS
+.DS_Store
+
+# Ansible
+vars
+inventory.yml
+
+# Editor
+.vscode
+
+# Packer 
+*.pkrvars.hcl
