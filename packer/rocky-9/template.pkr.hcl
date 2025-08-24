@@ -1,3 +1,5 @@
+# NOTE: As of Aug 23 2025, this is only tested with DVD ISO from Rocky
+
 variable "proxmox_url" {
 	type = string
 }
@@ -50,7 +52,8 @@ source "proxmox-iso" "rocky" {
 	node = "pmx"
 	task_timeout = "10m"
 	vm_id = 9005
-	memory = 4096
+	memory = 2048
+    cpu_type = "x86-64-v2-AES"
 	cores = 1
 	qemu_agent = true
 	
@@ -66,7 +69,8 @@ source "proxmox-iso" "rocky" {
 	http_directory = "http"
 
 	boot_iso {
-	  type = "scsi"
+	  # Had to use ide disk. dracut was failing to find the ISO. Suspected reason: no drivers for virtio scsi in initramfs in Rocky installer
+	  type = "ide"
 	  iso_file = var.iso
 	  iso_checksum = var.iso_checksum
 	  iso_storage_pool = "local"
@@ -77,19 +81,13 @@ source "proxmox-iso" "rocky" {
     boot_command = [
      "<up>",
      "<wait1>",
-     "<eOn>e<eOff>",
-     "<wait5>",
-     "<bs>",
-     "<wait1>",
-     "<down>",
-     "<down>",
-     "<down>",
-     "<left>",
-     "<spacebar>",
-     "inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
-     "<spacebar>",
-     "<wait1>",
-     "<leftCtrlOn>x<leftCtrlOff>",
+     "<tab>",
+	 "<wait1>",
+	 "<bs><bs><bs><bs><bs><bs>",
+     " inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg",
+	 " inst.text",
+	 "<wait1>",
+     "<enter><enter>",
  	]	
 
 	network_adapters {
@@ -98,7 +96,8 @@ source "proxmox-iso" "rocky" {
 	}
 
 	disks {
-		type = "scsi"
+		# Used ide disk b/c failing with scsi. Installer could not find /sda when using scsi. Suspected reason similar to boot disk, missing drivers
+		type = "ide"
 		disk_size = "8G"
 		storage_pool = "local-lvm"
 	}
