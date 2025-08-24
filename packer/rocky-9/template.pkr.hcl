@@ -34,6 +34,11 @@ variable "iso_checksum" {
     type = string
 }
 
+variable "vm_id" {
+	type = number
+	default = 9000
+}
+
 
 packer {
   required_plugins {
@@ -51,7 +56,7 @@ source "proxmox-iso" "rocky" {
 	password = var.proxmox_password
 	node = "pmx"
 	task_timeout = "10m"
-	vm_id = 9005
+	vm_id = var.vm_id
 	memory = 2048
     cpu_type = "x86-64-v2-AES"
 	cores = 1
