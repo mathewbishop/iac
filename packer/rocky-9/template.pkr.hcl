@@ -58,7 +58,7 @@ source "proxmox-iso" "rocky" {
 	task_timeout = "10m"
 	vm_id = var.vm_id
 	memory = 2048
-    cpu_type = "x86-64-v2-AES"
+	cpu_type = "x86-64-v2-AES"
 	cores = 1
 	qemu_agent = true
 	
