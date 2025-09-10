@@ -38,7 +38,13 @@ update_pkgs() {
 }
 
 # Ensure dependencies
-install_pkg curl ca-certificates
+echo "[INFO] Ensuring necessary dependencies.."
+if ! is_installed curl || ! is_installed ca-certificates; then
+  echo "[INFO] Installing curl and ca-certificates.."
+  install_pkg curl ca-certificates
+else
+  echo "[INFO] curl and ca-certificates are already installed.. OK"
+fi
 
 # If Rocky, enable the EPEL, we will need it for Kea install
 if [[ "$ID" == 'rocky' ]]; then

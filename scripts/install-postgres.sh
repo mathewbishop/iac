@@ -1,64 +1,66 @@
 #!/bin/bash
-
-# Install PostgreSQL on Debian
+# Install PostgreSQL on Debian or RHEL
 
 set -euo pipefail
 
-success() {
-        local GREEN='\033[32m'
-        local RESET='\033[0m'
-        echo -e "${GREEN}$1${RESET}"
+update_pkgs() {
+  echo "[INFO] Updating packages.."
+  if [[ "$ID" == "debian" ]]; then
+    apt-get update >/dev/null
+  else
+    dnf -y makecache >/dev/null
+  fi
 }
 
-error() {
-        local RED='\033[31m'
-        local RESET='\033[0m'
-        echo -e "${RED}$1${RESET}"
+install_pkg() {
+  if [[ "$ID" == "debian" ]]; then
+    apt-get install -y "$@" >/dev/null
+  else
+    dnf install -y "$@" >/dev/null
+  fi
 }
 
-echo "Installing curl and ca-certificates.."
-apt-get -y install curl ca-certificates > /dev/null
+source /etc/os-release
 
-echo "Ensure /usr/share/postgresql-common/pgdg exists.."
-install -d /usr/share/postgresql-common/pgdg
+echo "[INFO] Ensure curl and ca-certificates are installed.."
+install_pkg curl ca-certificates
 
-if [[ -f /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc ]]; then
-        echo "Postgres signing key already exists, skipping.."
-else
-        echo "Installing Postgres signing key.."
-        curl --fail --show-error \
-          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
-          https://www.postgresql.org/media/keys/ACCC4CF8.asc
+echo "[INFO] Postgres repo setup.."
+if [[ "$ID" == "debian" ]]; then
+  install -d /usr/share/postgresql-common/pgdg
+  if [[ -f /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc ]]; then
+    echo "Postgres signing key already exists, skipping.."
+  else
+    echo "Installing Postgres signing key.."
+    curl --fail --show-error \
+      -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+      https://www.postgresql.org/media/keys/ACCC4CF8.asc
+  fi
+
+  if [[ -s /etc/apt/sources.list.d/pgdg.list ]]; then
+    echo "Postgres repo is already added, skipping.."
+  else
+    sh -c "echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main' > /etc/apt/sources.list.d/pgdg.list"
+  fi
 fi
 
-if [[ -s /etc/apt/sources.list.d/pgdg.list ]]; then
-        echo "Postgres repo is already added, skipping.."
-else
-        if [[ ! -f /etc/os-release ]]; then
-                error "/etc/os-release not found, cannot determine OS codename"
-                exit 1
-        fi
-        source /etc/os-release
-        sh -c "echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main' > /etc/apt/sources.list.d/pgdg.list"
-fi
-
-echo "Updating packages.."
-apt-get update > /dev/null
-
+update_pkgs
 
 if [[ -n "$1" ]]; then
-        pg_version="$1"
+  pg_version="$1"
 else
-        read -p "Enter the PostgreSQL version you want to install: " pg_version
+  read -p "Enter the PostgreSQL version you want to install: " pg_version
 fi
 
 if [[ ! "$pg_version" =~ ^[0-9]+$ ]]; then
-        error "Invalid version number: $pg_version"
-        exit 1
+  echo "[ERR] Invalid version number: $pg_version. Exiting.."
+  exit 1
 fi
 
-echo "Installing PostgreSQL version $pg_version"
+####################################
+# Postgresql Package Install
+####################################
+echo "[INFO] Installing PostgreSQL version $pg_version"
+install_pkg "postgresql-$pg_version"
+echo "[SUCCESS] Done. PostgreSQL $pg_version installed."
 
-apt-get install -y "postgresql-$pg_version" > /dev/null
-
-success "Done. PostgreSQL $pg_version installed."
