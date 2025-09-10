@@ -8,18 +8,40 @@ set -euo pipefail
 source /etc/os-release
 
 if [[ "$ID" != "debian" && "$ID" != "rocky" ]]; then
-  echo "OS is not Debian or Rocky. Only Debian and Rocky are supported. Exiting.."
+  echo "[ERROR] OS is not Debian or Rocky. Only Debian and Rocky are supported. Exiting.."
   exit 1
 fi
 
-# Ensure dependencies
-if [[ "$ID" == 'debian' ]]; then
-  apt-get install -y curl ca-certificates
-fi
+install_pkg() {
+  if [[ "$ID" == "debian" ]]; then
+    apt-get install -y "$@" >/dev/null
+  else
+    dnf install -y "$@" >/dev/null
+  fi
+}
 
+is_installed() {
+  if [[ "$ID" == "debian" ]]; then
+    dpkg -s "$1" &>/dev/null
+  else
+    dnf list installed "$1" &>/dev/null
+  fi
+}
+
+update_pkgs() {
+  echo "[INFO] Updating packages.."
+  if [[ "$ID" == "debian" ]]; then
+    apt-get update >/dev/null
+  else
+    dnf -y makecache >/dev/null
+  fi
+}
+
+# Ensure dependencies
+install_pkg curl ca-certificates
+
+# If Rocky, enable the EPEL, we will need it for Kea install
 if [[ "$ID" == 'rocky' ]]; then
-  dnf install -y curl ca-certificates
-  # Enable EPEL, we will need it later
   dnf config-manager --set-enabled crb
   dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
 fi
@@ -32,7 +54,7 @@ if [[ "$ID" == "debian" ]]; then
       'https://dl.cloudsmith.io/public/isc/kea-3-0/setup.deb.sh' |
       sudo -E bash
   else
-    echo "Kea 3.0 repo already installed.."
+    echo "[INFO] Kea 3.0 repo already installed.."
   fi
 fi
 
@@ -42,48 +64,23 @@ if [[ "$ID" == "rocky" ]]; then
       'https://dl.cloudsmith.io/public/isc/kea-3-0/setup.rpm.sh' |
       sudo -E bash
   else
-    echo "Kea 3.0 repo already installed.."
+    echo "[INFO] Kea 3.0 repo already installed.."
   fi
 fi
 
-# Check if kea metapackage is already installed
-if [[ "$ID" == "debian" ]]; then
-  if ! dpkg -l | grep -q isc-kea; then
-    echo "Installing isc-kea metapackage.."
-    apt-get update >/dev/null
-    apt-get install -y isc-kea >/dev/null
-  else
-    echo "isc-kea is already installed.."
-  fi
-fi
-
-if [[ "$ID" == "rocky" ]]; then
-  if ! dnf list installed isc-kea &>/dev/null; then
-    echo "Installing isc-kea metapackage.."
-    dnf check-update >/dev/null
-    dnf install -y isc-kea >/dev/null
-  else
-    echo "isc-kea is already installed.."
-  fi
+# Install Kea if not already installed
+if ! is_installed isc-kea; then
+  update_pkgs
+  echo "[INFO] Installing isc-kea metapackage.."
+  install_pkg isc-kea
+else
+  echo "[INFO] Kea metapackage already installed.."
 fi
 
 # Install kea control agent (still needed for Stork as of Stork 2.3)
-if [[ "$ID" == "debian" ]]; then
-  if ! dpkg -l | grep -q isc-kea-ctrl-agent; then
-    echo "Installing Kea Control Agent.."
-    apt-get install -y isc-kea-ctrl-agent >/dev/null
-  else
-    echo "Kea control agent is already installed.."
-  fi
+if ! is_installed isc-kea-ctrl-agent; then
+  echo "[INFO] Installing kea control agent.."
+  install_pkg isc-kea-ctrl-agent
+else
+  echo "[INFO] Kea control agent is already installed.."
 fi
-
-if [[ "$ID" == "rocky" ]]; then
-  if ! dnf list installed isc-kea-ctrl-agent &>/dev/null; then
-    echo "Installing Kea Control Agent.."
-    dnf install -y isc-kea-ctrl-agent >/dev/null
-  else
-    echo "Kea control agent is already installed.."
-  fi
-fi
-
-echo "Done. isc-kea and isc-kea-ctrl-agent are installed."
