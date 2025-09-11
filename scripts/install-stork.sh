@@ -87,7 +87,16 @@ if ! which psql &>/dev/null; then
 else
   echo "[INFO] Setting up stork database.."
   # Have to run this as postgres system user since it will use local peer auth to connect to postgres server
+  set +e # Turn off the -e option so that the command run in the subshell will report failure. Otherwise it does not
   output=$(sudo -u postgres stork-tool db-create --db-name stork --db-user stork-server)
+  exit_code=$?
+  if [[ $exit_code -ne 0 ]]; then
+    echo "[ERR] Stork DB setup failed with exit code $exit_code"
+    echo "$output" >&2
+    exit 1
+  fi
+  set -e # Reset the -e option
+
   if [[ $output =~ password=\"([^\"]+)\" ]]; then
     password=${BASH_REMATCH[1]}
     echo "[INFO] Database password is $password"
@@ -100,3 +109,5 @@ else
   sed -i "s#^STORK_DATABASE_PASSWORD=.*#STORK_DATABASE_PASSWORD=$password#" /etc/stork/server.env
   echo "[INFO] Done. Stork env configured. OK."
 fi
+
+echo "[INFO] Done. Stork is installed."
