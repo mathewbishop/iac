@@ -20,6 +20,10 @@ variable "ssh_password" {
 	sensitive = true
 }
 
+variable "vm_id" {
+  type = number
+}
+
 
 packer {
   required_plugins {
@@ -37,7 +41,7 @@ source "proxmox-iso" "debian-12" {
 	password = var.proxmox_password
 	node = "pmx"
 	task_timeout = "10m"
-	vm_id = 9004
+	vm_id = var.vm_id
 	memory = 2048
 	cores = 1
 	qemu_agent = true
