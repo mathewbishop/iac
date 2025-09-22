@@ -24,11 +24,19 @@ variable "vm_id" {
   type = number
 }
 
+variable "node" {
+  type = string
+}
+
+variable "storage_pool_name" {
+  type = string
+} 
+
 
 packer {
   required_plugins {
-    name = {
-      version = "~> 1"
+    proxmox = {
+      version = ">= 1.2.3"
       source  = "github.com/hashicorp/proxmox"
     }
   }
@@ -39,7 +47,7 @@ source "proxmox-iso" "debian-12" {
 	insecure_skip_tls_verify = true
 	username = var.proxmox_username
 	password = var.proxmox_password
-	node = "pmx"
+	node = var.node
 	task_timeout = "10m"
 	vm_id = var.vm_id
 	memory = 2048
@@ -51,21 +59,21 @@ source "proxmox-iso" "debian-12" {
 	ssh_timeout = "10m"
 
 	cloud_init = true
-	cloud_init_storage_pool = "local-lvm"
+	cloud_init_storage_pool = var.storage_pool_name
 
-	template_name = "debian-12-base"
+	template_name = "debian12-base"
 
 	http_directory = "http"
 
 	boot_iso {
 	  type = "scsi"
-	  iso_file = "local:iso/debian-12.11.0-amd64-netinst.iso"
+    iso_file = "local:iso/debian-12.11.0-amd64-netinst.iso"
 	  iso_checksum = "sha256:30ca12a15cae6a1033e03ad59eb7f66a6d5a258dcf27acd115c2bd42d22640e8"
 	  iso_storage_pool = "local"
 	  unmount = true
 	}
 
-	boot_wait = "5s"
+	boot_wait = "15s"
     boot_command = [
   	  "<esc>",
   	  "<wait>",
@@ -80,8 +88,8 @@ source "proxmox-iso" "debian-12" {
 
 	disks {
 		type = "scsi"
-		disk_size = "8G"
-		storage_pool = "local-lvm"
+		disk_size = "16G"
+		storage_pool = var.storage_pool_name
 	}
 }
 
@@ -101,7 +109,7 @@ build {
 		"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cloud-init vim",
 		"sudo rm /root/.bashrc",
 		"sudo mv /home/debian/rootbashrc /root/",
-		"sudo mv /root/rootbashrc /root/.bashrc",
+		"sudo mv /root/rootbashrc /root/.bashrc"
 	]
   }
 }
