@@ -100,7 +100,7 @@ source "proxmox-iso" "debian" {
 	  unmount = true
 	}
 
-  order = "ide2;scsi0"
+  boot = "ide2;scsi0"
 
 	boot_wait = "15s"
   boot_command = [
