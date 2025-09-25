@@ -32,7 +32,7 @@ variable "template_name" {
   type = string
 }
 
-variable "storage_pool_name" {
+variable "disk_storage_pool" {
   type = string
 } 
 
@@ -49,6 +49,10 @@ variable "iso_storage_pool" {
 }
 
 variable "preseed_file" {
+  type = string
+}
+
+variable "efi_storage_pool" {
   type = string
 }
 
@@ -79,7 +83,7 @@ source "proxmox-iso" "debian-12" {
 	ssh_timeout = "10m"
 
 	cloud_init = true
-	cloud_init_storage_pool = var.storage_pool_name
+	cloud_init_storage_pool = var.disk_storage_pool
 
 	template_name = var.template_name
 
@@ -109,12 +113,12 @@ source "proxmox-iso" "debian-12" {
 	disks {
 		type = "scsi"
 		disk_size = "16G"
-		storage_pool = var.storage_pool_name
+		storage_pool = var.disk_storage_pool
 	}
 
   bios = "ovmf"
   efi_config {
-    efi_storage_pool = "local"
+    efi_storage_pool = var.efi_storage_pool
   }
 }
 
