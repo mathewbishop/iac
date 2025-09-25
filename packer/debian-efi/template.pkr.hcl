@@ -93,7 +93,7 @@ source "proxmox-iso" "debian" {
 	http_directory = "http"
 
 	boot_iso {
-	  type = "scsi"
+	  type = "ide"
     iso_file = var.iso_file
 	  iso_checksum = var.iso_checksum
 	  iso_storage_pool = var.iso_storage_pool
