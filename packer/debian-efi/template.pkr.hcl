@@ -22,38 +22,41 @@ variable "ssh_password" {
 
 variable "vm_id" {
   type = number
+  description = "ID you would like to set for the completed VM template"
 }
 
 variable "node" {
   type = string
+  description = "The proxmox node name"
 }
 
 variable "template_name" {
   type = string
+  description = "The name you would like to set for the completed VM template"
 }
 
 variable "disk_storage_pool" {
   type = string
+  description = "This storage pool will be used for the VM disk, the cloud init drive, and the efi"
 } 
 
-variable "iso_file_location" {
+variable "iso_file" {
   type = string
+  description = "Full location of the iso file. Example: local:iso/debian-12.11.10-amd64-netinst.iso"
 }
 
-variable "iso_file_checksum" {
+variable "iso_checksum" {
   type = string
 }
 
 variable "iso_storage_pool" {
   type = string
+  description = "Storage pool for the ISO file, usually 'local'"
 }
 
 variable "preseed_file" {
   type = string
-}
-
-variable "efi_storage_pool" {
-  type = string
+  description = "Name of the preseed file you want to use from the http/ directory"
 }
 
 
@@ -66,7 +69,7 @@ packer {
   }
 }
 
-source "proxmox-iso" "debian-12" {
+source "proxmox-iso" "debian" {
 	proxmox_url = var.proxmox_url
 	insecure_skip_tls_verify = true
 	username = var.proxmox_username
@@ -91,8 +94,8 @@ source "proxmox-iso" "debian-12" {
 
 	boot_iso {
 	  type = "scsi"
-    iso_file = var.iso_file_location
-	  iso_checksum = var.iso_file_checksum
+    iso_file = var.iso_file
+	  iso_checksum = var.iso_checksum
 	  iso_storage_pool = var.iso_storage_pool
 	  unmount = true
 	}
@@ -118,13 +121,16 @@ source "proxmox-iso" "debian-12" {
 
   bios = "ovmf"
   efi_config {
-    efi_storage_pool = var.efi_storage_pool
+    efi_storage_pool = var.disk_storage_pool
+    pre_enrolled_keys = true
+    efi_format = "raw"
+    efi_type = "4m"
   }
 }
 
 build {
   sources = [
-    "source.proxmox-iso.debian-12"
+    "source.proxmox-iso.debian"
   ]
 
   provisioner "file" {
