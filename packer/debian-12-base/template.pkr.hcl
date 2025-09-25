@@ -28,9 +28,29 @@ variable "node" {
   type = string
 }
 
+variable "template_name" {
+  type = string
+}
+
 variable "storage_pool_name" {
   type = string
 } 
+
+variable "iso_file_location" {
+  type = string
+}
+
+variable "iso_file_checksum" {
+  type = string
+}
+
+variable "iso_storage_pool" {
+  type = string
+}
+
+variable "preseed_file" {
+  type = string
+}
 
 
 packer {
@@ -61,24 +81,24 @@ source "proxmox-iso" "debian-12" {
 	cloud_init = true
 	cloud_init_storage_pool = var.storage_pool_name
 
-	template_name = "debian12-base"
+	template_name = var.template_name
 
 	http_directory = "http"
 
 	boot_iso {
 	  type = "scsi"
-    iso_file = "local:iso/debian-12.11.0-amd64-netinst.iso"
-	  iso_checksum = "sha256:30ca12a15cae6a1033e03ad59eb7f66a6d5a258dcf27acd115c2bd42d22640e8"
-	  iso_storage_pool = "local"
+    iso_file = var.iso_file_location
+	  iso_checksum = var.iso_file_checksum
+	  iso_storage_pool = var.iso_storage_pool
 	  unmount = true
 	}
 
 	boot_wait = "15s"
-    boot_command = [
+  boot_command = [
   	  "<esc>",
   	  "<wait>",
-	  "auto url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/preseed.cfg",
-	  "<enter>"
+	    "auto url=http://{{ .HTTPIP }}:{{ .HTTPPort }}/${var.preseed_file}",
+	    "<enter>"
  	]	
 
 	network_adapters {
@@ -91,6 +111,11 @@ source "proxmox-iso" "debian-12" {
 		disk_size = "16G"
 		storage_pool = var.storage_pool_name
 	}
+
+  bios = "ovmf"
+  efi_config {
+    efi_storage_pool = "local"
+  }
 }
 
 build {
@@ -99,17 +124,17 @@ build {
   ]
 
   provisioner "file" {
-	source = "files/bashrc"
-	destination = "/home/debian/rootbashrc"
+    source = "files/bashrc"
+    destination = "/home/debian/rootbashrc"
   }
 
   provisioner "shell" {
-	inline = [
-		"sudo DEBIAN_FRONTEND=noninteractive apt-get update",
-		"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cloud-init vim",
-		"sudo rm /root/.bashrc",
-		"sudo mv /home/debian/rootbashrc /root/",
-		"sudo mv /root/rootbashrc /root/.bashrc"
-	]
+    inline = [
+      "sudo DEBIAN_FRONTEND=noninteractive apt-get update",
+      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y cloud-init vim",
+      "sudo rm /root/.bashrc",
+      "sudo mv /home/debian/rootbashrc /root/",
+      "sudo mv /root/rootbashrc /root/.bashrc"
+    ]
   }
 }
