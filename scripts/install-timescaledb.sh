@@ -38,7 +38,7 @@ apt-get update
 
 read -p "What version of PostgreSQL do you want to install Timescale for? " pg_version
 
-read -p "What version of TimescaleDB do you want to install?" timescale_version
+read -p "What version of TimescaleDB do you want to install? " timescale_version
 
 if [[ -z "$pg_version" || ! "$pg_version" =~ ^[0-9]+$ ]]; then
   error "PostgreSQL number must not be empty and must be a number (e.g. 16). Exiting."
@@ -47,7 +47,7 @@ fi
 
 echo "Installing timescaledb-2-postgresql-$pg_version='$timescale_version'"
 
-apt-get install -y timescaledb-2-postgresql-"$pg_version='$timescale_version'" >/dev/null
+apt-get install -y timescaledb-2-postgresql-"$pg_version='$timescale_version'" timescaledb-2-loader-postgresql-"$pg_version='$timescale_version'" >/dev/null
 
 echo "Running timescaledb-tune"
 
