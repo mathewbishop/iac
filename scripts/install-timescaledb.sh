@@ -47,7 +47,7 @@ fi
 
 echo "Installing timescaledb-2-postgresql-$pg_version='$timescale_version'"
 
-apt-get install -y timescaledb-2-postgresql-"$pg_version='$timescale_version'" timescaledb-2-loader-postgresql-"$pg_version='$timescale_version'" >/dev/null
+apt-get install -y timescaledb-2-postgresql-"$pg_version=$timescale_version" timescaledb-2-loader-postgresql-"$pg_version=$timescale_version" >/dev/null
 
 echo "Running timescaledb-tune"
 
